@@ -78,6 +78,7 @@ def downsample(filters, size, apply_instancenorm=True):
 
     return result
 
+
 def upsample(filters, size, apply_dropout=False):
     
     # Initiante tensors with a normal distribution
@@ -101,6 +102,7 @@ def upsample(filters, size, apply_dropout=False):
     result.add(layers.ReLU())
 
     return result
+
 
 def Generator():
     inputs = layers.Input(shape=[256,256,3])
@@ -251,10 +253,10 @@ class CycleGan(keras.Model):
             monet_gen_loss = self.gen_loss_fn(disc_fake_monet)
             photo_gen_loss = self.gen_loss_fn(disc_fake_photo)
 
-            # evaluates total cycle consistency loss
+            # evaluates total cycle consistency loss (Zhu et al.)
             total_cycle_loss = self.cycle_loss_fn(real_monet, cycled_monet, self.lambda_cycle) + self.cycle_loss_fn(real_photo, cycled_photo, self.lambda_cycle)
 
-            # evaluates total generator loss
+            # evaluates total generator loss 
             total_monet_gen_loss = monet_gen_loss + total_cycle_loss + self.identity_loss_fn(real_monet, same_monet, self.lambda_cycle)
             total_photo_gen_loss = photo_gen_loss + total_cycle_loss + self.identity_loss_fn(real_photo, same_photo, self.lambda_cycle)
 
@@ -263,28 +265,17 @@ class CycleGan(keras.Model):
             photo_disc_loss = self.disc_loss_fn(disc_real_photo, disc_fake_photo)
 
         # Calculate the gradients for generator and discriminator
-        monet_generator_gradients = tape.gradient(total_monet_gen_loss,
-                                                  self.m_gen.trainable_variables)
-        photo_generator_gradients = tape.gradient(total_photo_gen_loss,
-                                                  self.p_gen.trainable_variables)
+        monet_generator_gradients = tape.gradient(total_monet_gen_loss, self.m_gen.trainable_variables)
+        photo_generator_gradients = tape.gradient(total_photo_gen_loss, self.p_gen.trainable_variables)
 
-        monet_discriminator_gradients = tape.gradient(monet_disc_loss,
-                                                      self.m_disc.trainable_variables)
-        photo_discriminator_gradients = tape.gradient(photo_disc_loss,
-                                                      self.p_disc.trainable_variables)
+        monet_discriminator_gradients = tape.gradient(monet_disc_loss, self.m_disc.trainable_variables)
+        photo_discriminator_gradients = tape.gradient(photo_disc_loss, self.p_disc.trainable_variables)
 
         # Apply the gradients to the optimizer
-        self.m_gen_optimizer.apply_gradients(zip(monet_generator_gradients,
-                                                 self.m_gen.trainable_variables))
-
-        self.p_gen_optimizer.apply_gradients(zip(photo_generator_gradients,
-                                                 self.p_gen.trainable_variables))
-
-        self.m_disc_optimizer.apply_gradients(zip(monet_discriminator_gradients,
-                                                  self.m_disc.trainable_variables))
-
-        self.p_disc_optimizer.apply_gradients(zip(photo_discriminator_gradients,
-                                                  self.p_disc.trainable_variables))
+        self.m_gen_optimizer.apply_gradients(zip(monet_generator_gradients, self.m_gen.trainable_variables))
+        self.p_gen_optimizer.apply_gradients(zip(photo_generator_gradients, self.p_gen.trainable_variables))
+        self.m_disc_optimizer.apply_gradients(zip(monet_discriminator_gradients, self.m_disc.trainable_variables))
+        self.p_disc_optimizer.apply_gradients(zip(photo_discriminator_gradients, self.p_disc.trainable_variables))
         
         return {
             "monet_gen_loss": total_monet_gen_loss,
@@ -292,10 +283,11 @@ class CycleGan(keras.Model):
             "monet_disc_loss": monet_disc_loss,
             "photo_disc_loss": photo_disc_loss
         }
+    
 
 #%% LOSS FUNCTIONS
 
-# with strategy.scope():
+# Compute cross-entropy loss between true labels and predicted labels.
 def discriminator_loss(real, generated):
     real_loss = tf.keras.losses.BinaryCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)(tf.ones_like(real), real)
 
@@ -305,17 +297,18 @@ def discriminator_loss(real, generated):
 
     return total_disc_loss * 0.5
 
-# with strategy.scope():
+
 def generator_loss(generated):
     return tf.keras.losses.BinaryCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)(tf.ones_like(generated), generated)
 
-# with strategy.scope():
+
+#  reduce = func(func(func(s1, s2),s3), ... , sn)
 def calc_cycle_loss(real_image, cycled_image, LAMBDA):
     loss1 = tf.reduce_mean(tf.abs(real_image - cycled_image))
 
     return LAMBDA * loss1
     
-# with strategy.scope():
+
 def identity_loss(real_image, same_image, LAMBDA):
     loss = tf.reduce_mean(tf.abs(real_image - same_image))
     return LAMBDA * 0.5 * loss
